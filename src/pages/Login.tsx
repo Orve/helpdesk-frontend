@@ -1,5 +1,6 @@
 // src/pages/Login.tsx
 import { useState } from 'react'
+import axios, { AxiosError } from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/axios'
 import { useQueryClient } from '@tanstack/react-query'
@@ -14,16 +15,35 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await api.get('/sanctum/csrf-cookie')
-      await api.post('/auth/login', { email, password })
+      await axios.get('http://localhost:8000/sanctum/csrf-cookie', {
+        withCredentials: true,
+      })
+      await api.post('/auth/login', 
+        {
+          email,
+          password,
+        }, {
+          withCredentials: true,
+          headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      }
+    ) // ← これも必要
 
       // me 情報再取得（キャッシュ更新 or Zustand更新）
       await queryClient.invalidateQueries({ queryKey: ['me'] })
-
       navigate('/tickets') // ログイン後のリダイレクト先
-    } catch (err: any) {
-      setError('ログインに失敗しました')
-      console.error(err)
+    } catch (err: unknown) {
+      const error = err as AxiosError<{ message?: string; errors?: Record<string, string[]> }>
+      const msg =
+        error?.response?.data?.message || // Laravel全体のエラー
+        error?.response?.data?.errors?.email?.[0] || // emailだけのバリデーション
+        error?.response?.data?.errors?.password?.[0] || // passwordのバリデーション
+        'ログインに失敗しました'
+
+      setError(msg)
+      console.error('login error:', error?.response ?? err)
     }
   }
 
